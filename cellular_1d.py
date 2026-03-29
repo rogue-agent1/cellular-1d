@@ -1,51 +1,59 @@
 #!/usr/bin/env python3
-"""1D cellular automaton explorer — all 256 Wolfram rules."""
+"""cellular_1d - 1D elementary cellular automata (Wolfram rules)."""
 import sys
 
-def evolve(cells, rule):
-    n = len(cells); new = [0]*n
+def make_rule(rule_number):
+    return {tuple(int(b) for b in f"{i:03b}"): (rule_number >> i) & 1 for i in range(8)}
+
+def step(cells, rule):
+    n = len(cells)
+    new = [0] * n
     for i in range(n):
-        pattern = (cells[(i-1)%n] << 2) | (cells[i] << 1) | cells[(i+1)%n]
-        new[i] = (rule >> pattern) & 1
+        left = cells[(i - 1) % n]
+        center = cells[i]
+        right = cells[(i + 1) % n]
+        new[i] = rule[(left, center, right)]
     return new
 
-def classify(rule, steps=200, width=201):
-    cells = [0]*width; cells[width//2] = 1
-    seen = set(); populations = []
-    for _ in range(steps):
-        key = tuple(cells)
-        if key in seen: return 'Class 1: Fixed point' if len(populations) < 3 else 'Class 2: Periodic'
-        seen.add(key)
-        populations.append(sum(cells))
-        cells = evolve(cells, rule)
-    pop_var = max(populations[-50:]) - min(populations[-50:])
-    return 'Class 3: Chaotic' if pop_var > width*0.1 else 'Class 4: Complex'
-
-def render(rule, width=79, steps=40, init='center'):
-    cells = [0]*width
-    if init == 'center': cells[width//2] = 1
-    elif init == 'random': import random; cells = [random.randint(0,1) for _ in range(width)]
-    for _ in range(steps):
-        print(''.join('█' if c else ' ' for c in cells))
-        cells = evolve(cells, rule)
-
-if __name__ == '__main__':
-    import argparse
-    p = argparse.ArgumentParser()
-    p.add_argument('rule', type=int, nargs='?', default=110)
-    p.add_argument('-w', '--width', type=int, default=79)
-    p.add_argument('-s', '--steps', type=int, default=40)
-    p.add_argument('--classify', action='store_true')
-    p.add_argument('--all-classes', action='store_true')
-    p.add_argument('--random', action='store_true')
-    args = p.parse_args()
-    if args.all_classes:
-        classes = {}
-        for r in range(256):
-            c = classify(r); classes.setdefault(c, []).append(r)
-        for c, rules in sorted(classes.items()): print(f"{c}: {rules[:10]}{'...' if len(rules)>10 else ''} ({len(rules)} rules)")
-    elif args.classify:
-        print(f"Rule {args.rule}: {classify(args.rule)}")
+def simulate(rule_number, width, steps, init=None):
+    rule = make_rule(rule_number)
+    if init is None:
+        cells = [0] * width
+        cells[width // 2] = 1
     else:
-        print(f"Rule {args.rule}")
-        render(args.rule, args.width, args.steps, 'random' if args.random else 'center')
+        cells = list(init)
+    history = [cells[:]]
+    for _ in range(steps):
+        cells = step(cells, rule)
+        history.append(cells[:])
+    return history
+
+def render(history):
+    lines = []
+    for row in history:
+        lines.append("".join("#" if c else "." for c in row))
+    return "\n".join(lines)
+
+def test():
+    # Rule 30
+    h = simulate(30, 11, 5)
+    assert len(h) == 6
+    assert h[0][5] == 1  # center cell
+    assert sum(h[0]) == 1
+    assert sum(h[1]) > 1  # cells spread
+    # Rule 110 (Turing complete)
+    h2 = simulate(110, 21, 10)
+    assert len(h2) == 11
+    # Rule 0 should kill everything
+    h3 = simulate(0, 11, 3)
+    assert sum(h3[-1]) == 0
+    # Rule 255 should fill everything
+    h4 = simulate(255, 11, 1)
+    assert all(c == 1 for c in h4[1])
+    print("OK: cellular_1d")
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "test":
+        test()
+    else:
+        print("Usage: cellular_1d.py test")
